@@ -1,46 +1,87 @@
 from django.contrib.auth.models import User
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render,redirect
 import requests
 
+from Hacker_News import settings
+
 
 def home(request):
-    return render(request, 'static.html')
+    page = request.GET.get('page', 1)
+    search = request.GET.get('search', None)
 
-def login(request):
-    if request.method == 'POST':
-        username1 = request.POST['User_name']
-        password1 = request.POST['password']
-        from django.contrib import auth
-        x = auth.authenticate(User_name=username1,password=password1)
-        if x is None:
-            return redirect('login')
+    if search is None or search == "top":
+        # get the top news
+        url = "https://newsapi.org/v2/top-headlines?country={}&page={}&apiKey={}".format(
+            "us", 1, settings.APIKEY
+        )
+    else:
+        # get the search query request
+        url = "https://newsapi.org/v2/everything?q={}&sortBy={}&page={}&apiKey={}".format(
+            search, "popularity", page, settings.APIKEY
+        )
+    r = requests.get(url=url)
+
+    data = r.json()
+    if data["status"] != "ok":
+        return HttpResponse("<h1>Request Failed</h1>")
+    data = data["articles"]
+    context = {
+        "success": True,
+        "data": [],
+        "search": search
+    }
+    # seprating the necessary data
+    for i in data:
+        context["data"].append({
+            "title": i["title"],
+            "description":  "" if i["description"] is None else i["description"],
+            "url": i["url"],
+            "image": "" if i["urlToImage"] is None else i["urlToImage"],
+            "publishedat": i["publishedAt"]
+        })
+    # send the news feed to template in context
+    return render(request, 'index.html', context=context)
+
+
+def loadcontent(request):
+    try:
+        page = request.GET.get('page', 1)
+        search = request.GET.get('search', None)
+        # url = "https://newsapi.org/v2/everything?q={}&sortBy={}&page={}&apiKey={}".format(
+        #     "Technology","popularity",page,settings.APIKEY
+        # )
+        if search is None or search=="top":
+            url = "https://newsapi.org/v2/top-headlines?country={}&page={}&apiKey={}".format(
+                "us", page, settings.APIKEY
+            )
         else:
-            return redirect('/')
+            url = "https://newsapi.org/v2/everything?q={}&sortBy={}&page={}&apiKey={}".format(
+                search, "popularity", page, settings.APIKEY
+            )
+        print("url:",url)
+        r = requests.get(url=url)
 
-    else:
-        return render(request, 'login.html')
+        data = r.json()
+        if data["status"] != "ok":
+            return JsonResponse({"success":False})
+        data = data["articles"]
+        context = {
+            "success": True,
+            "data": [],
+            "search": search
+        }
+        for i in data:
+            context["data"].append({
+                "title": i["title"],
+                "description":  "" if i["description"] is None else i["description"],
+                "url": i["url"],
+                "image": "" if i["urlToImage"] is None else i["urlToImage"],
+                "publishedat": i["publishedAt"]
+            })
+
+        return JsonResponse(context)
+    except Exception as e:
+        return JsonResponse({"success":False})
 
 
-def signup(request):
-    if request.method == 'POST':
-        User_name = request.POST['User_name']
-        Email = request.POST['Email']
-        password = request.POST['password']
-
-        x=User.objects.create_user(User_name=User_name, Email=Email, password=password)
-        x.save()
-        print("USER CREATED")
-        return redirect('static.html')
-
-
-    else:
-         return render(request, 'signup.html')
-
-
-'''def home(request):
-    response = requests.get('https://newsapi.org/v2/top-headlines?country=in&apiKey=12c7ca59e3ad4853b432c22449cda531')
-    output = response.json()
-
-
-    return render(request, 'home.html', {"articles": output['articles']})'''
